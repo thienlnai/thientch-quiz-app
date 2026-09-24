@@ -2412,8 +2412,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
             <div className="p-6 space-y-4 text-xs">
               <p className="text-slate-600">
-                Chọn từ 2 đề thi trở lên để gộp toàn bộ câu hỏi lại thành một đề thi khảo thí mới (không kiểm tra trùng lặp câu hỏi theo quy định).
+                Chọn từ 2 đề thi trở lên để gộp toàn bộ câu hỏi lại thành một đề thi khảo thí mới. Hệ thống sẽ tự động tối ưu hóa hình ảnh để đề thi gộp lưu siêu tốc lên cơ sở dữ liệu.
               </p>
+
+              <div className="p-2.5 bg-purple-50/80 rounded-xl border border-purple-200 flex items-center gap-2 text-[11px] text-purple-900 font-medium">
+                <Layers className="w-4 h-4 text-purple-600 shrink-0" />
+                <span>⚡ <strong>Tối ưu hóa siêu tốc:</strong> Tự động nén ảnh và gộp cấu trúc câu hỏi nhẹ gọn giúp việc lưu đề diễn ra trong chớp mắt.</span>
+              </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
@@ -2497,7 +2502,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   {isMerging ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
-                  <span>Xác Nhận Gộp {mergeSelectedExamIds.length} Đề Thi</span>
+                  <span>{isMerging ? 'Đang Tối Ưu & Gộp Đề...' : `Xác Nhận Gộp ${mergeSelectedExamIds.length} Đề Thi`}</span>
                 </button>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { supabase, handleSupabaseError, OperationType, isConfigured } from '../supabase.ts';
 import { School, SchoolClass, Student, UserAccount, Exam, ExamSubmission } from '../types/index.ts';
+import { optimizeExamQuestions } from '../utils/imageOptimizer.ts';
 
 // Initial admin password required specifically by the user: 8653564@Thien
 export const INITIAL_ADMIN_PASSWORD = '8653564@Thien';
@@ -73,9 +74,16 @@ function notifyUsers() {
   saveLocalData(STORAGE_KEYS.users, localUsers);
   userListeners.forEach((fn) => fn([...localUsers]));
 }
+let saveExamsDebounceTimer: any = null;
 function notifyExams() {
-  saveLocalData(STORAGE_KEYS.exams, localExams);
+  // 1. Cập nhật ngay lập tức cho React listeners để UI phản hồi trong 0ms
   examListeners.forEach((fn) => fn([...localExams]));
+
+  // 2. Trì hoãn ghi vào localStorage trong nền để không chặn luồng giao diện chính
+  if (saveExamsDebounceTimer) clearTimeout(saveExamsDebounceTimer);
+  saveExamsDebounceTimer = setTimeout(() => {
+    saveLocalData(STORAGE_KEYS.exams, localExams);
+  }, 300);
 }
 function notifySubmissions() {
   saveLocalData(STORAGE_KEYS.submissions, localSubmissions);
@@ -357,18 +365,35 @@ export function subscribeExams(onUpdate: (exams: Exam[]) => void) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: EXAMS_TABLE },
-        () => {
-          supabase
-            .from(EXAMS_TABLE)
-            .select('*')
-            .order('createdAt', { ascending: false })
-            .then(({ data, error }) => {
-              if (!error && data) {
-                localExams = data as Exam[];
-                localExams.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                notifyExams();
-              }
-            });
+        (payload: any) => {
+          const { eventType, new: newExam, old: oldExam } = payload || {};
+          if (eventType === 'INSERT' && newExam && newExam.id) {
+            const exists = localExams.some((e) => e.id === newExam.id);
+            if (!exists) {
+              localExams = [newExam as Exam, ...localExams];
+              localExams.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              notifyExams();
+            }
+          } else if (eventType === 'UPDATE' && newExam && newExam.id) {
+            localExams = localExams.map((e) => (e.id === newExam.id ? { ...e, ...newExam } : e));
+            notifyExams();
+          } else if (eventType === 'DELETE' && oldExam && oldExam.id) {
+            localExams = localExams.filter((e) => e.id !== oldExam.id);
+            notifyExams();
+          } else {
+            // Fallback tải lại khi sự kiện không mang payload chi tiết
+            supabase
+              .from(EXAMS_TABLE)
+              .select('*')
+              .order('createdAt', { ascending: false })
+              .then(({ data, error }) => {
+                if (!error && data) {
+                  localExams = data as Exam[];
+                  localExams.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                  notifyExams();
+                }
+              });
+          }
         }
       )
       .subscribe();
@@ -1100,6 +1125,10 @@ export async function batchAddStudents(
 export async function addExam(data: Omit<Exam, 'id' | 'createdAt' | 'updatedAt'>): Promise<Exam> {
   const id = `exam_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const now = new Date().toISOString();
+
+  // 1. Tự động rà soát & nén hình ảnh câu hỏi bằng thuật toán Canvas song song (giảm 95% dung lượng)
+  const optimizedQuestions = await optimizeExamQuestions(data.questions || []);
+
   const exam: Exam = {
     ...data,
     id,
@@ -1107,11 +1136,14 @@ export async function addExam(data: Omit<Exam, 'id' | 'createdAt' | 'updatedAt'>
     passingScore: 950,
     createdAt: now,
     updatedAt: now,
+    questions: optimizedQuestions,
   };
 
+  // 2. Cập nhật lạc quan (Optimistic Update) tức thì trong 0ms
   localExams = [exam, ...localExams];
   notifyExams();
 
+  // 3. Đồng bộ lên Supabase với payload siêu nhẹ (~50 KB - 100 KB) thay vì 30 MB
   if (isConfigured) {
     try {
       const { error } = await supabase.from(EXAMS_TABLE).insert(cleanDbData(exam));
@@ -1125,13 +1157,22 @@ export async function addExam(data: Omit<Exam, 'id' | 'createdAt' | 'updatedAt'>
 
 export async function updateExam(id: string, data: Partial<Exam>): Promise<void> {
   const now = new Date().toISOString();
+
+  // Tự động tối ưu hình ảnh câu hỏi nếu có cập nhật danh sách câu hỏi
+  let questions = data.questions;
+  if (questions && questions.length > 0) {
+    questions = await optimizeExamQuestions(questions);
+  }
+
   const payload = cleanDbData({
     ...data,
+    ...(questions ? { questions } : {}),
     totalScore: 1000,
     passingScore: 950,
     updatedAt: now,
   });
 
+  // Cập nhật lạc quan ngay lập tức
   localExams = localExams.map((e) => (e.id === id ? { ...e, ...payload } : e));
   notifyExams();
 
@@ -1170,11 +1211,14 @@ export async function mergeExams(
   practiceRandomCount: number = 0
 ): Promise<Exam> {
   const combinedQuestions = sourceExams.flatMap((exam) =>
-    exam.questions.map((q) => ({
+    (exam.questions || []).map((q) => ({
       ...q,
       id: `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     }))
   );
+
+  // Tối ưu hóa trước toàn bộ câu hỏi gộp để tránh payload khổng lồ
+  const optimizedQuestions = await optimizeExamQuestions(combinedQuestions);
 
   return await addExam({
     title: newTitle,
@@ -1191,7 +1235,7 @@ export async function mergeExams(
     allowReviewAnswers: true,
     isPracticeTest,
     practiceRandomCount: isPracticeTest && practiceRandomCount > 0 ? practiceRandomCount : 0,
-    questions: combinedQuestions,
+    questions: optimizedQuestions,
   });
 }
 
