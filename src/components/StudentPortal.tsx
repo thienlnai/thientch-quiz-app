@@ -669,6 +669,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       {reviewingSubmission && (
         <ExamReviewModal
           submission={reviewingSubmission}
+          exams={exams}
           onClose={() => setReviewingSubmission(null)}
         />
       )}

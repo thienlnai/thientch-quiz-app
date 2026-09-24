@@ -207,7 +207,8 @@ export interface ExamSubmission {
     maxScore: number;
     details?: any;
   }>;
-  questionsSnapshot: ExamQuestion[]; // Lưu lại snapshot câu hỏi và thứ tự câu của lần thi này
+  questionsSnapshot?: ExamQuestion[]; // Tùy chọn (dùng cho bộ nhớ tạm thời), không lưu vào CSDL để tiết kiệm 95% dung lượng
+  questionOrder?: string[];           // Danh sách ID câu hỏi theo thứ tự làm bài (~50 bytes thay vì ~15 KB)
   violationCount: number;     // Số lần vi phạm quy chế thi (chuột phải, F12, rời màn hình,...)
   violationLogs?: Array<{
     id: string;

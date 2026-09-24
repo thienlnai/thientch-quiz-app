@@ -45,6 +45,7 @@ import { Sidebar, SidebarMenuItem } from './Sidebar.tsx';
 import { TopBar } from './TopBar.tsx';
 import { ExamReviewModal } from './ExamReviewModal.tsx';
 import { ScoreRangeDeleteModal } from './ScoreRangeDeleteModal.tsx';
+import { StorageOptimizationModal } from './StorageOptimizationModal.tsx';
 import { Pagination } from './Pagination.tsx';
 import {
   School,
@@ -183,6 +184,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isBulkDeleteSubmissionsOpen, setIsBulkDeleteSubmissionsOpen] = useState(false);
   const [isBulkDeletingSubmissions, setIsBulkDeletingSubmissions] = useState(false);
   const [isScoreRangeDeleteOpen, setIsScoreRangeDeleteOpen] = useState(false);
+  const [isStorageOptimizationOpen, setIsStorageOptimizationOpen] = useState(false);
 
   // Pagination states (10 items per page)
   const [schoolsPage, setSchoolsPage] = useState<number>(1);
@@ -1194,16 +1196,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       <span className="text-[#475569]">Khóa màn hình phòng thi:</span>
                       <span className="font-bold text-emerald-600">SẴN SÀNG</span>
                     </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#475569]">Supabase CSDL Free:</span>
+                      <span className="font-bold text-blue-600 font-mono">500 MB (~0.8KB/bài)</span>
+                    </div>
                   </div>
 
                   {/* Quick Shortcut CTA */}
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-2">
                     <button
                       onClick={() => setActiveTab('schools')}
                       className="w-full py-2.5 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs primary-cta-btn flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>Quản Lý Danh Mục Ngay</span>
                       <ArrowUpRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsStorageOptimizationOpen(true)}
+                      className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Database className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Tối Ưu & Dọn Dẹp CSDL Free</span>
                     </button>
                   </div>
 
@@ -2135,6 +2149,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               </div>
 
               <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsStorageOptimizationOpen(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 hover:from-blue-700 hover:to-indigo-700 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Tối ưu dung lượng Supabase bản Free, sao lưu lưu trữ và dọn dẹp bài nộp"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Tối Ưu CSDL (Bản Free)</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsScoreRangeDeleteOpen(true)}
@@ -3853,6 +3876,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {submissionToReview && (
         <ExamReviewModal
           submission={submissionToReview}
+          exams={exams}
           onClose={() => setSubmissionToReview(null)}
           onDelete={(sub) => {
             setSubmissionToReview(null);
@@ -4170,6 +4194,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         role="admin"
         onDeleteSuccess={(deletedCount, affectedStudentsCount) => {
           showToast(`Đã xóa thành công ${deletedCount} bài thi của ${affectedStudentsCount} học sinh theo khoảng điểm!`);
+        }}
+      />
+
+      {/* ================= MODAL: TỐI ƯU DUNG LƯỢNG SUPABASE (BẢN FREE) ================= */}
+      <StorageOptimizationModal
+        isOpen={isStorageOptimizationOpen}
+        onClose={() => setIsStorageOptimizationOpen(false)}
+        submissions={submissions}
+        onActionComplete={(msg) => {
+          showToast(msg);
         }}
       />
 

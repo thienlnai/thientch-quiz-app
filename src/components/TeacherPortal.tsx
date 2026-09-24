@@ -2558,6 +2558,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
       {submissionToReview && (
         <ExamReviewModal
           submission={submissionToReview}
+          exams={exams}
           onClose={() => setSubmissionToReview(null)}
           onDelete={(sub) => {
             setSubmissionToReview(null);

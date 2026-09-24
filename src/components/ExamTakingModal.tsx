@@ -353,9 +353,10 @@ export const ExamTakingModal: React.FC<ExamTakingModalProps> = ({
       isTeacherTesting,
       studentAnswers: answers,
       questionResults: scoreResult.questionResults,
-      questionsSnapshot: shuffledQuestions,
+      questionOrder: shuffledQuestions.map((q) => q.id),
+      questionsSnapshot: shuffledQuestions, // Giữ tạm trong bộ nhớ cho màn hình xem lại tức thì
       violationCount,
-      violationLogs: violationLogs.length > 0 ? violationLogs : undefined,
+      violationLogs: violationLogs.length > 0 ? (violationLogs.length > 5 ? violationLogs.slice(-5) : violationLogs) : undefined,
     };
 
     setSubmissionResult(submission);

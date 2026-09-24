@@ -1198,23 +1198,43 @@ export async function mergeExams(
 // ================= CRUD: EXAM SUBMISSIONS =================
 export async function addExamSubmission(data: Omit<ExamSubmission, 'id'>): Promise<ExamSubmission> {
   const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const submission: ExamSubmission = {
-    ...data,
+  
+  // Trích xuất thứ tự câu hỏi (~50 bytes) thay vì lưu toàn bộ questionsSnapshot (~15 KB)
+  const questionOrder = data.questionOrder || (data.questionsSnapshot ? data.questionsSnapshot.map((q) => q.id) : undefined);
+  
+  // Tinh gọn violationLogs tối đa 5 sự kiện gần nhất để không làm phình dung lượng
+  const condensedViolationLogs = data.violationLogs && data.violationLogs.length > 5
+    ? data.violationLogs.slice(-5)
+    : data.violationLogs;
+
+  // Bản ghi nhẹ lưu CSDL Supabase (Bỏ hoàn toàn questionsSnapshot theo Giải pháp 1)
+  const { questionsSnapshot, ...lightweightData } = data;
+  const savedSubmission: ExamSubmission = {
+    ...lightweightData,
     id,
+    questionOrder,
+    violationLogs: condensedViolationLogs,
   };
 
-  localSubmissions = [submission, ...localSubmissions];
+  // Giữ questionsSnapshot trong bộ nhớ tạm thời của phiên làm việc hiện tại
+  const inMemorySubmission: ExamSubmission = {
+    ...savedSubmission,
+    questionsSnapshot,
+  };
+
+  localSubmissions = [savedSubmission, ...localSubmissions];
   notifySubmissions();
 
   if (isConfigured) {
     try {
-      const { error } = await supabase.from(SUBMISSIONS_TABLE).insert(cleanDbData(submission));
+      // Gửi dữ liệu đã tinh gọn lên Supabase (tiết kiệm 95% dung lượng CSDL)
+      const { error } = await supabase.from(SUBMISSIONS_TABLE).insert(cleanDbData(savedSubmission));
       if (error) handleSupabaseError(error, OperationType.CREATE, `${SUBMISSIONS_TABLE}/${id}`);
     } catch (error) {
       handleSupabaseError(error, OperationType.CREATE, `${SUBMISSIONS_TABLE}/${id}`);
     }
   }
-  return submission;
+  return inMemorySubmission;
 }
 
 export async function deleteExamSubmission(id: string): Promise<void> {
@@ -1255,3 +1275,69 @@ export async function deleteStudentSubmissions(
   if (targetIds.length === 0) return 0;
   return await deleteMultipleExamSubmissions(targetIds);
 }
+
+// ================= STORAGE OPTIMIZATION & ARCHIVING (SUPABASE FREE) =================
+
+/**
+ * Xóa sạch tất cả bài thi thử (isPractice = true) để giải phóng dung lượng CSDL
+ */
+export async function purgePracticeSubmissions(): Promise<number> {
+  const practiceIds = localSubmissions.filter((s) => s.isPractice).map((s) => s.id);
+  if (practiceIds.length === 0) return 0;
+  return await deleteMultipleExamSubmissions(practiceIds);
+}
+
+/**
+ * Xóa các bài thi cũ hơn số ngày chỉ định (ví dụ 30, 60, 90 ngày)
+ */
+export async function purgeOldSubmissions(daysOld: number): Promise<number> {
+  const cutoffTime = Date.now() - daysOld * 24 * 60 * 60 * 1000;
+  const oldIds = localSubmissions
+    .filter((s) => new Date(s.submittedAt).getTime() < cutoffTime)
+    .map((s) => s.id);
+  if (oldIds.length === 0) return 0;
+  return await deleteMultipleExamSubmissions(oldIds);
+}
+
+/**
+ * Quét và tối ưu hóa các bài thi cũ có lưu thừa questionsSnapshot trong bộ nhớ local/CSDL
+ */
+export function optimizeExistingSubmissionsStorage(): number {
+  let count = 0;
+  localSubmissions = localSubmissions.map((sub) => {
+    if (sub.questionsSnapshot && sub.questionsSnapshot.length > 0) {
+      count++;
+      const questionOrder = sub.questionOrder || sub.questionsSnapshot.map((q) => q.id);
+      const { questionsSnapshot, ...rest } = sub;
+      return { ...rest, questionOrder };
+    }
+    return sub;
+  });
+  if (count > 0) {
+    notifySubmissions();
+  }
+  return count;
+}
+
+/**
+ * Xuất dữ liệu bài nộp ra tệp JSON sao lưu ngoại tuyến trước khi dọn dẹp CSDL
+ */
+export function exportSubmissionsArchive(submissionsList: ExamSubmission[]): void {
+  const exportData = {
+    app: 'THIENTCH IT Assessment System',
+    exportDate: new Date().toISOString(),
+    totalSubmissions: submissionsList.length,
+    submissions: submissionsList,
+  };
+  const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(exportData, null, 2))}`;
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute('href', jsonString);
+  downloadAnchor.setAttribute(
+    'download',
+    `thientch_submissions_backup_${new Date().toISOString().slice(0, 10)}.json`
+  );
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+}
+

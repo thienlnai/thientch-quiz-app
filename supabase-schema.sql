@@ -87,30 +87,29 @@ CREATE TABLE IF NOT EXISTS public.exams (
   "updatedAt" TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. BẢNG KẾT QUẢ NỘP BÀI (submissions)
+-- 6. BẢNG KẾT QUẢ NỘP BÀI (submissions - Tối ưu siêu nhẹ ~0.8 KB/bài, KHÔNG lưu questionsSnapshot)
 CREATE TABLE IF NOT EXISTS public.submissions (
   id TEXT PRIMARY KEY,
-  "examId" TEXT,
-  "examTitle" TEXT,
-  "studentId" TEXT,
-  "studentCode" TEXT,
-  "studentName" TEXT,
-  "classId" TEXT,
-  "className" TEXT,
-  "schoolId" TEXT,
-  "schoolName" TEXT,
-  "totalScore" INTEGER DEFAULT 1000,
+  "examId" TEXT NOT NULL,
+  "examTitle" TEXT NOT NULL,
+  "studentId" TEXT NOT NULL,
+  "studentName" TEXT NOT NULL,
+  "studentCode" TEXT NOT NULL,
+  "classId" TEXT NOT NULL,
   score INTEGER DEFAULT 0,
-  "passingScore" INTEGER DEFAULT 950,
-  passed BOOLEAN DEFAULT FALSE,
-  "startedAt" TIMESTAMPTZ,
-  "submittedAt" TIMESTAMPTZ,
-  "durationSeconds" INTEGER DEFAULT 0,
-  answers JSONB DEFAULT '{}'::jsonb,
-  "totalQuestions" INTEGER DEFAULT 0,
-  "correctCount" INTEGER DEFAULT 0,
-  "incorrectCount" INTEGER DEFAULT 0,
-  "isPractice" BOOLEAN DEFAULT FALSE
+  "maxScore" INTEGER DEFAULT 1000,
+  "isPassed" BOOLEAN DEFAULT FALSE,
+  "submittedAt" TIMESTAMPTZ DEFAULT NOW(),
+  "dateKey" TEXT,
+  "timeSpentSeconds" INTEGER DEFAULT 0,
+  "attemptNumber" INTEGER DEFAULT 1,
+  "isPractice" BOOLEAN DEFAULT FALSE,
+  "isTeacherTesting" BOOLEAN DEFAULT FALSE,
+  "studentAnswers" JSONB DEFAULT '{}'::jsonb,
+  "questionResults" JSONB DEFAULT '{}'::jsonb,
+  "questionOrder" JSONB DEFAULT '[]'::jsonb,
+  "violationCount" INTEGER DEFAULT 0,
+  "violationLogs" JSONB DEFAULT '[]'::jsonb
 );
 
 -- 7. BẢNG NHẬT KÝ HOẠT ĐỘNG (audit_logs)

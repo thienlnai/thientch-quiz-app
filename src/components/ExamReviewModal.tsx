@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ExamSubmission } from '../types/index.ts';
+import React, { useState, useMemo } from 'react';
+import { ExamSubmission, Exam, ExamQuestion } from '../types/index.ts';
 import { HotspotCanvas } from './HotspotCanvas.tsx';
 import { 
   X, 
@@ -22,16 +22,52 @@ interface ExamReviewModalProps {
   submission: ExamSubmission;
   onClose: () => void;
   onDelete?: (submission: ExamSubmission) => void;
+  exam?: Exam;
+  exams?: Exam[];
 }
 
 export const ExamReviewModal: React.FC<ExamReviewModalProps> = ({
   submission,
   onClose,
   onDelete,
+  exam,
+  exams,
 }) => {
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const questions = submission.questionsSnapshot || [];
+
+  // Tái tạo danh sách câu hỏi một cách thông minh:
+  // 1. Dùng snapshot có sẵn trong bộ nhớ (nếu vừa thi xong)
+  // 2. Hoặc tái tạo từ đề thi gốc qua questionOrder (tiết kiệm 95% dung lượng CSDL)
+  const questions = useMemo<ExamQuestion[]>(() => {
+    if (submission.questionsSnapshot && submission.questionsSnapshot.length > 0) {
+      return submission.questionsSnapshot;
+    }
+
+    const targetExam = exam || (exams ? exams.find((e) => e.id === submission.examId) : undefined);
+    if (!targetExam || !targetExam.questions || targetExam.questions.length === 0) {
+      return [];
+    }
+
+    // Tái hiện theo đúng thứ tự câu hỏi lúc thí sinh làm bài
+    if (submission.questionOrder && submission.questionOrder.length > 0) {
+      const qMap = new Map(targetExam.questions.map((q) => [q.id, q]));
+      const ordered = submission.questionOrder
+        .map((qid) => qMap.get(qid))
+        .filter((q): q is ExamQuestion => Boolean(q));
+      if (ordered.length > 0) return ordered;
+    }
+
+    // Nếu là bài thi ngẫu nhiên nhưng có kết quả chấm điểm từng câu
+    if (submission.questionResults && Object.keys(submission.questionResults).length > 0) {
+      const activeIds = new Set(Object.keys(submission.questionResults));
+      const filtered = targetExam.questions.filter((q) => activeIds.has(q.id));
+      if (filtered.length > 0) return filtered;
+    }
+
+    return targetExam.questions;
+  }, [submission, exam, exams]);
+
   const currentQ = questions[selectedQuestionIndex];
   const qResult = currentQ ? submission.questionResults[currentQ.id] : null;
 
@@ -689,7 +725,15 @@ export const ExamReviewModal: React.FC<ExamReviewModalProps> = ({
                   </div>
                 )}
               </div>
-            ) : null}
+            ) : (
+              <div className="max-w-md mx-auto my-12 p-8 bg-white rounded-3xl border border-slate-200 text-center space-y-3 shadow-xs">
+                <AlertCircle className="w-12 h-12 text-slate-400 mx-auto" />
+                <h3 className="font-bold text-slate-800 text-base">Không tìm thấy nội dung câu hỏi</h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Đề thi tương ứng với bài làm này có thể đã được cập nhật hoặc cần kết nối tới danh sách đề thi để hiển thị chi tiết từng câu.
+                </p>
+              </div>
+            )}
           </main>
         </div>
 
